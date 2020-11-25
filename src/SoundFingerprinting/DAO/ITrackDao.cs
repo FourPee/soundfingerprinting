@@ -6,16 +6,18 @@ namespace SoundFingerprinting.DAO
 
     public interface ITrackDao
     {
-        IModelReference InsertTrack(TrackData track);
+        int Count { get; }
 
-        TrackData ReadTrack(IModelReference trackReference);
+        void InsertTrack(TrackData track);
+
+        IEnumerable<TrackData> ReadTracksByReferences(IEnumerable<IModelReference> references);
 
         int DeleteTrack(IModelReference trackReference);
 
-        IList<TrackData> ReadTrackByArtistAndTitleName(string artist, string title);
+        TrackData? ReadTrackById(string id);
 
-        TrackData ReadTrackByISRC(string isrc);
-
-        IList<TrackData> ReadAll();
+        IEnumerable<TrackData> ReadAll();
+        
+        IEnumerable<string> GetTrackIds();
     }
 }

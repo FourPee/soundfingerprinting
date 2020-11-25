@@ -9,29 +9,28 @@
     using SoundFingerprinting.Utils;
 
     [TestFixture]
-    public class FingerprintDescriptorTest : AbstractTest
+    public class FingerprintDescriptorTest
     {
         private const int TopWavelets = 200;
 
         private IFingerprintDescriptor fingerprintDescriptor;
 
+        private IFingerprintEncoder fingerprintEncoder;
+
         [SetUp]
         public void SetUp()
         {
             fingerprintDescriptor = new FingerprintDescriptor();
+            fingerprintEncoder = new FingerprintEncoder();
         }
 
         [Test]
-        public void ExtractTopWaveletesText()
+        public void ExtractTopWaveletsText()
         {
-            float[][] frames = new float[128][];
-            for (int i = 0; i < frames.Length; i++)
-            {
-                frames[i] = TestUtilities.GenerateRandomFloatArray(32);
-            }
-
-            bool[] actual = fingerprintDescriptor.ExtractTopWavelets(frames, TopWavelets);
-            bool[] expected = ExtractTopWaveletsTested(frames, TopWavelets);
+            float[] frames = TestUtilities.GenerateRandomFloatArray(128 * 32);
+            float[] copy = (float[])frames.Clone();
+            bool[] actual = fingerprintDescriptor.ExtractTopWavelets(frames, TopWavelets, RangeUtils.GetRange(128 * 32)).ToBools();
+            bool[] expected = ExtractTopWaveletsTested(copy, TopWavelets);
 
             CollectionAssert.AreEqual(expected, actual);
         }
@@ -39,17 +38,16 @@
         [Test]
         public void ExtractTopWaveletWorksCorrectly()
         {
-            float[][] frames = new float[2][];
-            frames[0] = new float[] { 5, 6, 1, 8, 9, 2, 0, -4, 6, -10, 7, 3 };
-            frames[1] = new float[] { 1, 0, 2, 5, -11, 0, 5, 13, 7, 6, 3, 2 };
-            bool[] expected = new[]
-                                  {
-                                      false, false, false, false, false, false, true, false, true, false, false, false, false, false, false, false, false, false, false,
-                                      true, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false,
-                                      true, false, false, false, false, false, false, false, false, false
-                                  };
+            float[] frames = { 5, 6, 1, 8, 9, 2, 0, -4, 6, -10, 7, 3, 1, 0, 2, 5, -11, 0, 5, 13, 7, 6, 3, 2 };
+            bool[] expected =
+                {
+                    false, false, false, false, false, false, true, false, true, false, false, false, false, false,
+                    false, false, false, false, false, true, false, false, false, false, false, false, false, false,
+                    false, false, false, false, false, true, false, false, false, false, true, false, false, false,
+                    false, false, false, false, false, false
+                };
 
-            bool[] encodedFingerprint = fingerprintDescriptor.ExtractTopWavelets(frames, 5);
+            bool[] encodedFingerprint = fingerprintDescriptor.ExtractTopWavelets(frames, 5, RangeUtils.GetRange(frames.Length)).ToBools();
 
             CollectionAssert.AreEqual(expected, encodedFingerprint);
         }
@@ -57,65 +55,46 @@
         [Test]
         public void EncodeFingerprintWorksAsExpected()
         {
-            float[] concatenatedSpectrumPowers = new float[] { 2, 4, 8, 9, 1, 3, 5 };
-            int[] indexes = new[] { 3, 2, 6, 1, 5, 0, 4 };
-            bool[] expected = new[] { false, false, false, false, true, false, true, false, false, false, false, false, false, false };
+            float[] framesSpectrumPowers = { 2, 4, 8, 9, 1, 3, 5 };
+            ushort[] indexes = { 3, 2, 6, 1, 5, 0, 4 };
+            bool[] expected = { false, false, false, false, true, false, true, false, false, false, false, false, false, false };
 
-            bool[] encodedFingerprint = fingerprintDescriptor.EncodeFingerprint(concatenatedSpectrumPowers, indexes, 2);
+            bool[] encodedFingerprint = fingerprintEncoder.EncodeFingerprint(framesSpectrumPowers, indexes, 2).ToBools();
 
             CollectionAssert.AreEqual(expected, encodedFingerprint);
         }
 
-        [Test]
-        public void DecodeFingerprintWorksAsExpected()
+        private bool[] ExtractTopWaveletsTested(float[] frames, int topWavelets)
         {
-            double[] expected = new double[] { 0, 0, 1, -1, 0, 0, 0 };
-
-            double[] decoded = fingerprintDescriptor.DecodeFingerprint(new[] { false, false, false, false, true, false, false, true, false, false, false, false, false, false });
-
-            CollectionAssert.AreEqual(expected, decoded);
-        }
-
-        private bool[] ExtractTopWaveletsTested(float[][] frames, int topWavelets)
-        {
-            int rows = frames.GetLength(0); /*128*/
-            int cols = frames[0].Length; /*32*/
-
-            double[] concatenated = new double[rows * cols]; /* 128 * 32 */
-            for (int row = 0; row < rows; row++)
-            {
-                Array.Copy(frames[row], 0, concatenated, row * frames[row].Length, frames[row].Length);
-            }
-
-            var query = concatenated.Select((value, index) => new KeyValuePair<int, double>(index, value))
+            var query = frames.Select((value, index) => new KeyValuePair<int, float>(index, value))
                                     .OrderByDescending(pair => Math.Abs(pair.Value));
 
-            if (topWavelets >= concatenated.Length)
+            if (topWavelets >= frames.Length)
             {
-                throw new ArgumentException("TopWaveletes cannot exceed the length of concatenated array");
+                throw new ArgumentException("TopWavelets cannot exceed the length of frames array");
             }
 
             // Negative Numbers = 01
             // Positive Numbers = 10
-            // Zeros            = 00      
-            bool[] result = new bool[concatenated.Length * 2]; /*Concatenated float array*/
+            // Zeros            = 00
+            // Concatenated float array
+            bool[] result = new bool[frames.Length * 2]; 
             int topW = 0;
-            foreach (var pair in query)
+            foreach ((int key, float f) in query)
             {
                 if (++topW > topWavelets)
                 {
                     break;
                 }
 
-                int index = pair.Key;
-                double value = pair.Value;
+                double value = f;
                 if (value > 0)
                 {
-                    result[index * 2] = true;
+                    result[key * 2] = true;
                 }
                 else if (value < 0)
                 {
-                    result[(index * 2) + 1] = true;
+                    result[(key * 2) + 1] = true;
                 }
             }
 

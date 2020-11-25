@@ -7,7 +7,9 @@
     /// </summary>
     public class RandomStride : IStride
     {
-        protected static readonly Random Random = new Random(unchecked((int)DateTime.Now.Ticks));
+        private readonly object lockObject = new object();
+        private const int DefaultSamplesPerFingerprint = 128 * 64;
+        private readonly Random random;
 
         /// <summary>
         ///   Initializes a new instance of the <see cref="RandomStride"/> class. 
@@ -18,7 +20,10 @@
         /// <param name="maxStride">
         ///   Exclusive max value used for generating a random stride
         /// </param>
-        public RandomStride(int minStride, int maxStride)
+        /// <param name="seed">
+        ///   Seed used when generating next random stride. Don't specify if you want to use program generated seed.
+        /// </param>
+        public RandomStride(int minStride, int maxStride, int seed)
         {
             if (minStride > maxStride)
             {
@@ -27,32 +32,30 @@
 
             Min = minStride;
             Max = maxStride;
-            FirstStride = Random.Next(minStride, maxStride);
+            random = seed == 0 ? new Random() : new Random(seed);
+            FirstStride = 0;
         }
 
-        public RandomStride(int minStride, int maxStride, int firstStride)
-            : this(minStride, maxStride)
-        {
-            FirstStride = firstStride;
-        }
+        private int Min { get; }
 
-        public int Min { get; private set; }
+        private int Max { get; }
 
-        public int Max { get; private set; }
-
-        public int FirstStride { get; private set; }
+        public int FirstStride { get; }
 
         public virtual int NextStride
         {
             get
             {
-                return Random.Next(Min, Max);
+                lock (lockObject)
+                {
+                    return DefaultSamplesPerFingerprint + random.Next(Min, Max);
+                }
             }
         }
 
         public override string ToString()
         {
-            return string.Format("RandomStride{0}-{1}", Min, Max);
+            return $"RandomStride{Min}-{Max}";
         }
     }
 }

@@ -1,15 +1,24 @@
 ﻿namespace SoundFingerprinting.Configuration
 {
-    using System.Linq;
+    using System.Collections.Generic;
+    using SoundFingerprinting.Data;
 
     public class DefaultQueryConfiguration : QueryConfiguration
     {
         public DefaultQueryConfiguration()
         {
-            ThresholdVotes = 5;
+            ThresholdVotes = Configs.Threshold.Default;
             MaxTracksToReturn = 25;
-            Clusters = Enumerable.Empty<string>();
-            FingerprintConfiguration = new DefaultFingerprintConfiguration();
+            PermittedGap = 2d;
+            AllowMultipleMatchesOfTheSameTrackInQuery = false;
+            FingerprintConfiguration = new DefaultFingerprintConfiguration
+                                       {
+                                           Stride = Configs.QueryStrides.DefaultStride,
+                                           FrequencyRange = Configs.FrequencyRanges.Default
+                                       };
+            YesMetaFieldsFilters = new Dictionary<string, string>();
+            NoMetaFieldsFilters = new Dictionary<string, string>();
+            QueryMediaType = MediaType.Audio;
         }
     }
 }

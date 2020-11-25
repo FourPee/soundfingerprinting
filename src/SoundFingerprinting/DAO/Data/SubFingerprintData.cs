@@ -1,45 +1,53 @@
 ﻿namespace SoundFingerprinting.DAO.Data
 {
     using System;
-    using System.Collections.Generic;
-    using System.Linq;
-
     using DAO;
 
+    using ProtoBuf;
+
     [Serializable]
+    [ProtoContract]
     public class SubFingerprintData
     {
-        public SubFingerprintData(long[] hashes, int sequenceNumber, double sequenceAt, IModelReference subFingerprintReference, IModelReference trackReference) : this()
+        public SubFingerprintData(int[] hashes, uint sequenceNumber, float sequenceAt, IModelReference subFingerprintReference, IModelReference trackReference) 
+            : this(hashes, sequenceNumber, sequenceAt, subFingerprintReference, trackReference, new byte[0])
+        {
+        }
+        
+        public SubFingerprintData(int[] hashes, uint sequenceNumber, float sequenceAt, IModelReference subFingerprintReference, IModelReference trackReference, byte[] originalPoint) : this()
         {
             Hashes = hashes;
             SubFingerprintReference = subFingerprintReference;
             TrackReference = trackReference;
             SequenceNumber = sequenceNumber;
             SequenceAt = sequenceAt;
+            OriginalPoint = originalPoint;
         }
 
-        [Obsolete]
-        public SubFingerprintData()
+        private SubFingerprintData()
         {
-            Clusters = Enumerable.Empty<string>();
         }
 
         [IgnoreBinding]
-        public long[] Hashes { get; internal set; }
+        [ProtoMember(1)]
+        public int[] Hashes { get; }
 
-        public int SequenceNumber { get; internal set; }
+        [ProtoMember(2)] 
+        public uint SequenceNumber { get; }
 
-        public double SequenceAt { get; internal set; }
+        [ProtoMember(3)]
+        public float SequenceAt { get; }
+
+        public byte[] OriginalPoint { get; }
 
         [IgnoreBinding]
-        public IEnumerable<string> Clusters { get; internal set; }
+        [ProtoMember(5)]
+        public IModelReference SubFingerprintReference { get; }
 
         [IgnoreBinding]
-        public IModelReference SubFingerprintReference { get; internal set; }
-
-        [IgnoreBinding]
-        public IModelReference TrackReference { get; internal set; }
-
+        [ProtoMember(6)]
+        public IModelReference TrackReference { get; }
+        
         public override bool Equals(object obj)
         {
             if (!(obj is SubFingerprintData))

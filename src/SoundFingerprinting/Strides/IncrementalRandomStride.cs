@@ -2,45 +2,37 @@
 {
     using System;
 
+    /// <inheritdoc />
     /// <summary>
-    ///   Incremental random stride used in providing step length (measured in number of audio samples) between 2 consecutive fingerprints
+    ///   Incremental random stride used in providing step length (measured in number of audio samples) between 2 consecutive fingerprints.
     /// </summary>
-    public class IncrementalRandomStride : RandomStride
+    public class IncrementalRandomStride : IStride
     {
-        private const int SamplesPerFingerprint = 128 * 64; // 8192 samples per one fingerprint
-
-        /// <summary>
-        ///   Initializes a new instance of the <see cref="IncrementalRandomStride"/> class. 
-        /// </summary>
-        /// <example>
-        ///   new IncrementalRandomStride(256, 512)
-        /// </example>
-        /// <param name="min">
-        ///   Inclusive min value used for generating a random stride
-        /// </param>
-        /// <param name="max">
-        ///   Exclusive max value used for generating a random stride
-        /// </param>
-        public IncrementalRandomStride(int min, int max) : base(min, max)
+        private readonly Random random;
+        
+        public IncrementalRandomStride(int minStride, int maxStride, int seed = 0) 
         {
-        }
-
-        internal IncrementalRandomStride(int minStride, int maxStride, int firstStride)
-            : base(minStride, maxStride, firstStride)
-        {
-        }
-
-        public override int NextStride
-        {
-            get
+            if (minStride > maxStride)
             {
-                return -SamplesPerFingerprint + Random.Next(Min, Max);
+                throw new ArgumentException("Bad arguments. Max stride should be bigger than Min stride");
             }
+
+            Min = minStride;
+            Max = maxStride;
+            random = seed == 0 ? new Random() : new Random(seed);
         }
+
+        private int Min { get; }
+
+        private int Max { get; }
+
+        public int FirstStride { get; } = 0;
+
+        public int NextStride => random.Next(Min, Max);
 
         public override string ToString()
         {
-            return string.Format("IncrementalRandomStride[{0}-{1})", Min, Max);
+            return $"IncrementalRandomStride[{Min}-{Max})";
         }
     }
 }

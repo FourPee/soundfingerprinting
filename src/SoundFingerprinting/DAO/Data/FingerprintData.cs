@@ -20,20 +20,19 @@
             TrackReference = trackReference;
         }
 
-        [Obsolete]
         public FingerprintData()
         {
             // no op
         }
 
         [IgnoreBinding]
-        public bool[] Signature { get; internal set; }
+        public bool[] Signature { get; }
 
         [IgnoreBinding]
-        public IModelReference FingerprintReference { get; internal set; }
+        public IModelReference FingerprintReference { get; }
 
         [IgnoreBinding]
-        public IModelReference TrackReference { get; internal set; }
+        public IModelReference TrackReference { get; }
 
         public override bool Equals(object obj)
         {

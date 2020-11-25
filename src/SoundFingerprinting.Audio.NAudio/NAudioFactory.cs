@@ -7,7 +7,7 @@
     {
         public WaveStream GetStream(string pathToAudioFile)
         {
-            // This class assumess media foundation libraries are installed on target machine
+            // This class assumes media foundation libraries are installed on target machine
             // In case you are running on Azure (Windows Server 2012) install Server Media Foundation feature
             return new MediaFoundationReader(pathToAudioFile);
         }
@@ -22,9 +22,12 @@
             return WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, numberOfChannels);
         }
 
-        public MediaFoundationTransform GetResampler(WaveStream streamToResample, int sampleRate, int numberOfChannels)
+        public MediaFoundationTransform GetResampler(WaveStream streamToResample, int sampleRate, int numberOfChannels, int resamplerQuality)
         {
-            return new MediaFoundationResampler(streamToResample, GetWaveFormat(sampleRate, numberOfChannels));
+            return new MediaFoundationResampler(streamToResample, GetWaveFormat(sampleRate, numberOfChannels))
+                {
+                    ResamplerQuality = resamplerQuality
+                };
         }
 
         public WaveInEvent GetWaveInEvent(int sampleRate, int numberOfChannels)

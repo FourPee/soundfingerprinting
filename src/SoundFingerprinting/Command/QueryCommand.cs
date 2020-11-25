@@ -1,113 +1,120 @@
 ﻿namespace SoundFingerprinting.Command
 {
     using System;
+    using System.Collections.Generic;
+    using System.Diagnostics;
     using System.Threading.Tasks;
 
     using SoundFingerprinting.Audio;
     using SoundFingerprinting.Builder;
     using SoundFingerprinting.Configuration;
+    using SoundFingerprinting.Data;
     using SoundFingerprinting.Query;
 
-    public sealed class QueryCommand : IQuerySource, IWithQueryAndFingerprintConfiguration, IQueryCommand
+    public sealed class QueryCommand : IQuerySource, IWithQueryConfiguration, IQueryCommand
     {
         private readonly IFingerprintCommandBuilder fingerprintCommandBuilder;
         private readonly IQueryFingerprintService queryFingerprintService;
         
         private IModelService modelService;
+        private IQueryMatchRegistry queryMatchRegistry;
         
         private Func<IWithFingerprintConfiguration> fingerprintingMethodFromSelector;
-        private Func<IFingerprintCommand> createFingerprintMethod;
+        private Func<IFingerprintCommand> createFingerprintCommand;
 
-        internal QueryCommand(IFingerprintCommandBuilder fingerprintCommandBuilder, IQueryFingerprintService queryFingerprintService)
+        private QueryConfiguration queryConfiguration;
+
+        public QueryCommand(IFingerprintCommandBuilder fingerprintCommandBuilder, IQueryFingerprintService queryFingerprintService)
         {
             this.fingerprintCommandBuilder = fingerprintCommandBuilder;
             this.queryFingerprintService = queryFingerprintService;
-            FingerprintConfiguration = new EfficientFingerprintConfigurationForQuerying();
-            QueryConfiguration = new DefaultQueryConfiguration { FingerprintConfiguration = FingerprintConfiguration };
+            queryConfiguration = new DefaultQueryConfiguration();
+            queryMatchRegistry = NoOpQueryMatchRegistry.NoOp;
         }
 
-        public FingerprintConfiguration FingerprintConfiguration { get; private set; }
-
-        public QueryConfiguration QueryConfiguration { get; private set; }
-
-        public IWithQueryAndFingerprintConfiguration From(string pathToAudioFile)
+        public IWithQueryConfiguration From(string pathToAudioFile)
         {
             fingerprintingMethodFromSelector = () => fingerprintCommandBuilder.BuildFingerprintCommand().From(pathToAudioFile);
             return this;
         }
 
-        public IWithQueryAndFingerprintConfiguration From(string pathToAudioFile, double secondsToProcess, double startAtSecond)
+        public IWithQueryConfiguration From(string pathToAudioFile, double secondsToProcess, double startAtSecond)
         {
             fingerprintingMethodFromSelector = () => fingerprintCommandBuilder.BuildFingerprintCommand()
                                                                               .From(pathToAudioFile, secondsToProcess, startAtSecond);
             return this;
         }
 
-        public IWithQueryAndFingerprintConfiguration From(AudioSamples audioSamples)
+        public IWithQueryConfiguration From(AudioSamples audioSamples)
         {
             fingerprintingMethodFromSelector = () => fingerprintCommandBuilder.BuildFingerprintCommand().From(audioSamples);
             return this;
         }
 
-        public IUsingQueryServices WithFingerprintConfig(FingerprintConfiguration fingerprintConfiguration)
+        public IWithQueryConfiguration From(Hashes hashes)
         {
-            FingerprintConfiguration = fingerprintConfiguration;
+            createFingerprintCommand = () => new ExecutedFingerprintCommand(hashes);
             return this;
         }
 
-        public IUsingQueryServices WithFingerprintConfig(Action<FingerprintConfiguration> amendFingerprintConfigFunctor)
+        public IUsingQueryServices WithQueryConfig(QueryConfiguration config)
         {
-            amendFingerprintConfigFunctor(FingerprintConfiguration);
+            queryConfiguration = config;
             return this;
         }
 
-        public IUsingQueryServices WithQueryConfig(QueryConfiguration queryConfiguration)
+        public IUsingQueryServices WithQueryConfig(Func<QueryConfiguration, QueryConfiguration> amendQueryConfigFunctor)
         {
-            QueryConfiguration = queryConfiguration;
+            queryConfiguration = amendQueryConfigFunctor(queryConfiguration);
             return this;
         }
 
-        public IUsingQueryServices WithQueryConfig(Action<QueryConfiguration> amendQueryConfigFunctor)
+        public IQueryCommand UsingServices(IModelService service, IAudioService audioService)
         {
-            amendQueryConfigFunctor(QueryConfiguration);
+            return UsingServices(service, audioService, NoOpQueryMatchRegistry.NoOp);
+        }
+        
+        public IQueryCommand UsingServices(IModelService service, IAudioService audioService, IQueryMatchRegistry registry)
+        {
+            modelService = service;
+            queryMatchRegistry = registry;
+            
+            if (createFingerprintCommand == null)
+            {
+                createFingerprintCommand = () => fingerprintingMethodFromSelector()
+                    .WithFingerprintConfig(queryConfiguration.FingerprintConfiguration)
+                    .UsingServices(audioService);
+            }
+
             return this;
         }
 
-        public IUsingQueryServices WithConfigs(FingerprintConfiguration fingerprintConfiguration, QueryConfiguration configuration)
+        public async Task<QueryResult> Query()
         {
-            QueryConfiguration = configuration;
-            FingerprintConfiguration = fingerprintConfiguration;
-            return this;
+            return await Query(DateTime.MinValue);
         }
 
-        public IUsingQueryServices WithConfigs(Action<FingerprintConfiguration> amendFingerprintFunctor, Action<QueryConfiguration> amendQueryConfigFunctor)
+        public async Task<QueryResult> Query(DateTime relativeTo)
         {
-            amendQueryConfigFunctor(QueryConfiguration);
-            amendFingerprintFunctor(FingerprintConfiguration);
-            return this;
-        }
+            var fingerprintingStopwatch = Stopwatch.StartNew();
+            var hashes = await createFingerprintCommand().Hash();
+            long fingerprintingDuration = fingerprintingStopwatch.ElapsedMilliseconds;
 
-        public IQueryCommand UsingServices(IModelService modelService, IAudioService audioService)
-        {
-            this.modelService = modelService;
-            createFingerprintMethod = () => fingerprintingMethodFromSelector()
-                                                .WithFingerprintConfig(FingerprintConfiguration)
-                                                .UsingServices(audioService);
-            return this;
-        }
+            var queryStopwatch = Stopwatch.StartNew();
+            var queryHashes = relativeTo == DateTime.MinValue ? hashes : hashes.WithNewRelativeTo(relativeTo);
+            var queryResult = queryFingerprintService.Query(queryHashes, queryConfiguration, modelService);
+            long queryDuration = queryStopwatch.ElapsedMilliseconds;
+            if (queryResult.ContainsMatches)
+            {
+                var queryMatches = queryResult.ResultEntries.ToQueryMatches();
+                queryMatchRegistry.RegisterMatches(queryMatches, new Dictionary<string, string>());
+            }
 
-        public Task<QueryResult> Query()
-        {
-            QueryConfiguration.FingerprintConfiguration = FingerprintConfiguration;
-            return createFingerprintMethod()
-                                     .Hash()
-                                     .ContinueWith(
-                                        task =>
-                                            {
-                                                var hashes = task.Result;
-                                                return queryFingerprintService.Query(hashes, this.QueryConfiguration, this.modelService);
-                                            },
-                                        TaskContinuationOptions.ExecuteSynchronously);
+            return new QueryResult(queryResult.ResultEntries, 
+                hashes,
+                new QueryStats(queryResult.Stats.TotalTracksAnalyzed,
+                queryResult.Stats.TotalFingerprintsAnalyzed,
+                queryDuration, fingerprintingDuration));
         }
     }
 }

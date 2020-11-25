@@ -2,36 +2,39 @@
 {
     using System.Collections.Generic;
 
-    using SoundFingerprinting.Infrastructure;
+    using global::NAudio.Wave;
 
     public class NAudioService : AudioService
     {
         private static readonly IReadOnlyCollection<string> NAudioSupportedFormats = new[] { ".mp3", ".wav" };
 
         private readonly INAudioSourceReader sourceReader;
+        private readonly int downSamplingQuality;
 
-        public NAudioService()
-            : this(DependencyResolver.Current.Get<INAudioSourceReader>())
+        public NAudioService(int downSamplingQuality = 25) : this(downSamplingQuality, new NAudioSourceReader(new SamplesAggregator(), new NAudioFactory()))
         {
             // no op
         }
 
-        internal NAudioService(INAudioSourceReader sourceReader)
+        internal NAudioService(int downSamplingQuality, INAudioSourceReader sourceReader)
         {
             this.sourceReader = sourceReader;
+            this.downSamplingQuality = downSamplingQuality;
         }
 
-        public override IReadOnlyCollection<string> SupportedFormats
+        public override float GetLengthInSeconds(string pathToSourceFile)
         {
-            get
+            using (var mediaFoundationReader = new MediaFoundationReader(pathToSourceFile))
             {
-                return NAudioSupportedFormats;
+                return (float)mediaFoundationReader.TotalTime.TotalSeconds;
             }
         }
 
+        public override IReadOnlyCollection<string> SupportedFormats => NAudioSupportedFormats;
+
         public override AudioSamples ReadMonoSamplesFromFile(string pathToSourceFile, int sampleRate, double seconds, double startAt)
         {
-            float[] samples = sourceReader.ReadMonoFromSource(pathToSourceFile, sampleRate, seconds, startAt);
+            var samples = sourceReader.ReadMonoFromSource(pathToSourceFile, sampleRate, seconds, startAt, downSamplingQuality);
             return new AudioSamples(samples, pathToSourceFile, sampleRate);
         }
     }

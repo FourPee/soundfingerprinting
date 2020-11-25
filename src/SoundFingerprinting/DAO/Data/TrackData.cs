@@ -1,61 +1,60 @@
 ﻿namespace SoundFingerprinting.DAO.Data
 {
     using System;
-
-    using Audio;
+    using System.Collections.Generic;
     using DAO;
 
+    using ProtoBuf;
+    using SoundFingerprinting.Data;
+
     [Serializable]
+    [ProtoContract]
     public class TrackData
     {
-        public TrackData(string isrc, string artist, string title, string album, int releaseYear, double length)
+        public TrackData(string id, string artist, string title, double length, IModelReference trackReference, IDictionary<string, string> metaFields, MediaType mediaType)
         {
-            ISRC = isrc;
+            Id = id;
             Artist = artist;
             Title = title;
-            Album = album;
-            ReleaseYear = releaseYear;
             Length = length;
-        }
-
-        public TrackData(TagInfo tags) : this(tags.ISRC, tags.Artist, tags.Title, tags.Album, tags.Year, tags.Duration)
-        {
-        }
-
-        public TrackData(
-            string isrc,
-            string artist,
-            string title,
-            string album,
-            int releaseYear,
-            double length,
-            IModelReference trackReference)
-            : this(isrc, artist, title, album, releaseYear, length)
-        {
             TrackReference = trackReference;
+            MetaFields = metaFields;
+            MediaType = mediaType;
         }
 
-        [Obsolete]
+        public TrackData(string id, string artist, string title, double length, IModelReference trackReference) : this(id, artist, title, length, trackReference, new Dictionary<string, string>(), MediaType.Audio)
+        {
+        }
+
         public TrackData()
         {
-            // this public parameterless constructor is left here to allow datastorages that leverage reflection to instantiate objects
-            // nontheless it is going to be removed in future versions
+            // left for proto-buf
+            MetaFields = new Dictionary<string, string>();
+            MediaType = MediaType.Audio;
         }
 
-        public string Artist { get; internal set; }
+        [ProtoMember(3)]
+        public string Id { get; }
 
-        public string Title { get; internal set; }
+        [ProtoMember(1)]
+        public string Artist { get; }
 
-        public string ISRC { get; internal set; }
+        [ProtoMember(2)]
+        public string Title { get; }
 
-        public string Album { get; internal set; }
-
-        public int ReleaseYear { get; internal set; }
-
-        public double Length { get; internal set; }
+        [ProtoMember(6)]
+        public double Length { get; }
 
         [IgnoreBinding]
-        public IModelReference TrackReference { get; internal set; }
+        [ProtoMember(7)]
+        public IModelReference TrackReference { get; }
+
+        [IgnoreBinding]
+        [ProtoMember(8)]
+        public IDictionary<string, string> MetaFields { get; }
+
+        [ProtoMember(9)]
+        public MediaType MediaType { get; }
 
         public override bool Equals(object obj)
         {

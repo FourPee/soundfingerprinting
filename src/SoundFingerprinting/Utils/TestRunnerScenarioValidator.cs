@@ -4,14 +4,12 @@
     using System.IO;
     using System.Linq;
 
-    using SoundFingerprinting.Infrastructure;
-
     internal class TestRunnerScenarioValidator
     {
         private readonly ITestRunnerUtils utils;
         private readonly TestRunnerConfig testRunnerConfig = new TestRunnerConfig();
 
-        public TestRunnerScenarioValidator() : this(DependencyResolver.Current.Get<ITestRunnerUtils>())
+        public TestRunnerScenarioValidator() : this(new TestRunnerUtils())
         {
         }
 
@@ -46,7 +44,7 @@
                     default:
                         return
                             TestScenariousValidationResult.InvalidResult(
-                                string.Format("Bad action '{0}'. Should be either 'Run' or 'Insert'", parameters[0]));
+                                $"Bad action '{parameters[0]}'. Should be either 'Run' or 'Insert'");
                 }
             }
 
@@ -60,7 +58,7 @@
             {
                 return
                     TestScenariousValidationResult.InvalidResult(
-                        string.Format("Path to songs folder '{0}' is not valid", folderWithSongs));
+                        $"Path to songs folder '{folderWithSongs}' is not valid");
             }
 
             var allSongsToInsert = utils.ListFiles(folderWithSongs, testRunnerConfig.AudioFileFilters);
@@ -68,7 +66,7 @@
             {
                 return
                     TestScenariousValidationResult.InvalidResult(
-                        string.Format("Path to songs folder '{0}' contains no items for insertion!", folderWithSongs));
+                        $"Path to songs folder '{folderWithSongs}' contains no items for insertion!");
             }
 
             try
@@ -90,7 +88,7 @@
             {
                 return
                     TestScenariousValidationResult.InvalidResult(
-                        string.Format("Path to folder with positives '{0}' is not valid", folderWithPositives));
+                        $"Path to folder with positives '{folderWithPositives}' is not valid");
             }
 
             string folderWithNegatives = parameters[2];
@@ -98,13 +96,13 @@
             {
                 return
                     TestScenariousValidationResult.InvalidResult(
-                        string.Format("Path to folder with negatives '{0}' is not valid", folderWithNegatives));
+                        $"Path to folder with negatives '{folderWithNegatives}' is not valid");
             }
 
             try
             {
                 utils.ToStride(parameters[3], parameters[4], parameters[5]);
-                int secondsToProcess = int.Parse(parameters[6]);
+                _ = int.Parse(parameters[6]);
                 utils.ParseInts(parameters[7], testRunnerConfig.StartAtsSeparator);
             }
             catch (Exception e)

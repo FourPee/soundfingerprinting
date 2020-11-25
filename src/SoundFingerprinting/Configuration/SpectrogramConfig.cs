@@ -7,81 +7,42 @@ namespace SoundFingerprinting.Configuration
 
     internal abstract class SpectrogramConfig
     {
-        private int overlap;
-        private int wdftSize;
         private FrequencyRange frequencyRange;
         private double logBase;
-        private int logBins;
-        private int imageLength;
 
         /// <summary>
         ///   Gets or sets overlap between the consecutively computed spectrum images 
         /// </summary>
-        /// <remarks>64 at 5512 sample rate is aproximatelly 11.6ms</remarks>
-        public int Overlap
-        {
-            get
-            {
-                return overlap;
-            }
-
-            set
-            {
-                if (value <= 0)
-                {
-                    throw new ArgumentException("Overlap can't be negative", "value");
-                }
-
-                overlap = value;
-            }
-        }
+        /// <remarks>64 at 5512 sample rate is approximately 11.6ms</remarks>
+        public ushort Overlap { get; set; }
 
         /// <summary>
         ///   Gets or sets size of the WDFT block, 371 ms
         /// </summary>
-        public int WdftSize
-        {
-            get
-            {
-                return wdftSize;
-            }
-
-            set
-            {
-                if (value <= 0)
-                {
-                    throw new ArgumentException("WdftSize can't be negative", "value");
-                }
-
-                wdftSize = value;
-            }
-        }
+        public ushort WdftSize { get; set; }
 
         /// <summary>
         ///  Gets or sets the frequency range to be taken into account 
         /// </summary>
         public FrequencyRange FrequencyRange
         {
-            get
-            {
-                return frequencyRange;
-            }
+            get => frequencyRange;
 
             set
             {
                 if (value.Min <= 0)
                 {
-                    throw new ArgumentException("Min frequency can't be negative", "value");
+                    throw new ArgumentException("Min frequency can't be negative", nameof(value));
                 }
 
                 if (value.Max <= 0)
                 {
-                    throw new ArgumentException("Max frequency can't be negative", "value");
+                    throw new ArgumentException("Max frequency can't be negative", nameof(value));
                 }
 
                 if (value.Min > value.Max)
                 {
-                    throw new ArgumentException("Min boundary cannot be bigger than Max boundary", "value");
+                    throw new ArgumentException("Min boundary cannot be bigger than Max boundary", nameof(value));
                 }
 
                 frequencyRange = value;
@@ -93,16 +54,13 @@ namespace SoundFingerprinting.Configuration
         /// </summary>
         public double LogBase
         {
-            get
-            {
-                return logBase;
-            }
+            get => logBase;
 
             set
             {
                 if (value <= 0)
                 {
-                    throw new ArgumentException("LogBase can't be negative or equal to 0", "value");
+                    throw new ArgumentException("LogBase can't be negative or equal to 0", nameof(value));
                 }
 
                 logBase = value;
@@ -112,54 +70,17 @@ namespace SoundFingerprinting.Configuration
         /// <summary>
         ///   Gets or sets number of logarithmically spaced bins between the frequency components computed by Fast Fourier Transform.
         /// </summary>
-        public int LogBins
-        {
-            get
-            {
-                return logBins;
-            }
-
-            set
-            {
-                if (value <= 0)
-                {
-                    throw new ArgumentException("LogBins can't be negative or equal to 0", "value");
-                }
-
-                logBins = value;
-            }
-        }
+        public byte LogBins { get; set; }
 
         /// <summary>
         ///   Gets or sets signature's length
         /// </summary>
-        public int ImageLength
-        {
-            get
-            {
-                return imageLength;
-            }
-
-            set
-            {
-                if (value <= 0)
-                {
-                    throw new ArgumentException("ImageLength can't be negative or equal to 0", "value");
-                }
-
-                imageLength = value;
-            }
-        }
+        public ushort ImageLength { get; set; }
 
         /// <summary>
         ///  Gets or sets a value indicating whether the algorithm should use dynamic logarithmic base, instead of static
         /// </summary>
         public bool UseDynamicLogBase { get; set; }
-
-        /// <summary>
-        ///  Gets or sets a value indicating whether audio signal has to be normalized before its spectrum is built
-        /// </summary>
-        public bool NormalizeSignal { get; set; }
 
         /// <summary>
         ///  Gets or sets stride between 2 consecutive spectrogram images

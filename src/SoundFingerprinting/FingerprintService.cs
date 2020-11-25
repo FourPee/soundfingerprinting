@@ -1,80 +1,117 @@
 namespace SoundFingerprinting
 {
+    using System;
     using System.Collections.Concurrent;
     using System.Collections.Generic;
     using System.Linq;
     using System.Threading.Tasks;
-
     using SoundFingerprinting.Audio;
     using SoundFingerprinting.Configuration;
+    using SoundFingerprinting.Configuration.Frames;
     using SoundFingerprinting.Data;
     using SoundFingerprinting.FFT;
-    using SoundFingerprinting.Infrastructure;
+    using SoundFingerprinting.Image;
+    using SoundFingerprinting.LSH;
     using SoundFingerprinting.Utils;
     using SoundFingerprinting.Wavelets;
 
-    internal class FingerprintService : IFingerprintService
+    public class FingerprintService : IFingerprintService
     {
         private readonly ISpectrumService spectrumService;
         private readonly IWaveletDecomposition waveletDecomposition;
         private readonly IFingerprintDescriptor fingerprintDescriptor;
-        private readonly IAudioSamplesNormalizer audioSamplesNormalizer;
-
-        public FingerprintService()
-            : this(
-                DependencyResolver.Current.Get<ISpectrumService>(),
-                DependencyResolver.Current.Get<IWaveletDecomposition>(),
-                DependencyResolver.Current.Get<IFingerprintDescriptor>(),
-                DependencyResolver.Current.Get<IAudioSamplesNormalizer>())
-        {
-        }
+        private readonly ILocalitySensitiveHashingAlgorithm lshAlgorithm;
 
         internal FingerprintService(
             ISpectrumService spectrumService,
+            ILocalitySensitiveHashingAlgorithm lshAlgorithm,
             IWaveletDecomposition waveletDecomposition,
-            IFingerprintDescriptor fingerprintDescriptor,
-            IAudioSamplesNormalizer audioSamplesNormalizer)
+            IFingerprintDescriptor fingerprintDescriptor)
         {
+            this.lshAlgorithm = lshAlgorithm;
             this.spectrumService = spectrumService;
             this.waveletDecomposition = waveletDecomposition;
             this.fingerprintDescriptor = fingerprintDescriptor;
-            this.audioSamplesNormalizer = audioSamplesNormalizer;
         }
 
-        public List<Fingerprint> CreateFingerprints(AudioSamples samples, FingerprintConfiguration configuration)
-        { 
-            NormalizeAudioIfNecessary(samples, configuration);
-            var spectrum = spectrumService.CreateLogSpectrogram(samples, configuration.SpectrogramConfig);
-            return CreateFingerprintsFromLogSpectrum(spectrum, configuration);
-        }
+        public static FingerprintService Instance { get; } = new FingerprintService(
+            new SpectrumService(new LomontFFT(), new LogUtility()),
+            LocalitySensitiveHashingAlgorithm.Instance,
+            new StandardHaarWaveletDecomposition(),
+            new FastFingerprintDescriptor());
 
-        private List<Fingerprint> CreateFingerprintsFromLogSpectrum(IEnumerable<SpectralImage> spectralImages, FingerprintConfiguration configuration)
+        public Hashes CreateFingerprintsFromAudioSamples(AudioSamples samples, FingerprintConfiguration configuration)
         {
-            var fingerprints = new ConcurrentBag<Fingerprint>();
-            Parallel.ForEach(spectralImages, spectralImage => 
+            var spectrumFrames = spectrumService.CreateLogSpectrogram(samples, configuration.SpectrogramConfig);
+            var hashes = CreateOriginalFingerprintsFromFrames(spectrumFrames, configuration)
+                .AsParallel()
+                .ToList()
+                .Select(fingerprint => lshAlgorithm.Hash(fingerprint, configuration.HashingConfig))
+                .ToList();
+
+            return new Hashes(hashes, samples.Duration, MediaType.Audio, samples.RelativeTo, new[] {samples.Origin});
+        }
+
+        public Hashes CreateFingerprintsFromImageFrames(Frames imageFrames, FingerprintConfiguration configuration)
+        {
+            var frames = imageFrames.ToList();
+            var hashes = CreateOriginalFingerprintsFromFrames(frames, configuration)
+                .AsParallel()
+                .Select(fingerprint => lshAlgorithm.HashImage(fingerprint, configuration.HashingConfig))
+                .ToList();
+
+            return new Hashes(hashes, imageFrames.Duration, MediaType.Video, imageFrames.RelativeTo, new[] {imageFrames.Origin});
+        }
+
+        internal IEnumerable<Fingerprint> CreateOriginalFingerprintsFromFrames(IEnumerable<Frame> frames, FingerprintConfiguration configuration)
+        {
+            var normalized = configuration.FrameNormalizationTransform.Normalize(frames);
+            var blurred = configuration.GaussianBlurConfiguration.GaussianFilter switch
             {
-                waveletDecomposition.DecomposeImageInPlace(spectralImage.Image);
-                bool[] image = fingerprintDescriptor.ExtractTopWavelets(spectralImage.Image, configuration.TopWavelets);
-                if (!IsSilence(image))
+                GaussianFilter.None => normalized,
+                _ => BlurFrames(normalized, configuration.GaussianBlurConfiguration)
+            };
+
+            var images = blurred.ToList();
+            if (!images.Any())
+            {
+                return Enumerable.Empty<Fingerprint>();
+            }
+
+            var fingerprints = new ConcurrentBag<Fingerprint>();
+            var length = images.First().Length;
+            var saveTransform = configuration.OriginalPointSaveTransform;
+            Parallel.ForEach(images, () => new ushort[length], (frame, loop, cachedIndexes) =>
                 {
-                    fingerprints.Add(new Fingerprint(image, spectralImage.StartsAt, spectralImage.SequenceNumber));
-                }
-            });
+                    byte[] originalPoint = saveTransform(frame);
+                    float[] rowCols = frame.ImageRowCols;
+                    waveletDecomposition.DecomposeImageInPlace(rowCols, frame.Rows, frame.Cols, configuration.HaarWaveletNorm);
+                    RangeUtils.PopulateIndexes(length, cachedIndexes);
+                    var image = fingerprintDescriptor.ExtractTopWavelets(rowCols, configuration.TopWavelets, cachedIndexes);
+                    if (!image.IsSilence())
+                    {
+                        fingerprints.Add(new Fingerprint(image, frame.StartsAt, frame.SequenceNumber, originalPoint));
+                    }
+
+                    return cachedIndexes;
+                },
+                cachedIndexes => { });
 
             return fingerprints.ToList();
         }
 
-        private bool IsSilence(IEnumerable<bool> image)
+        private static IEnumerable<Frame> BlurFrames(IEnumerable<Frame> frames, GaussianBlurConfiguration blurConfiguration)
         {
-            return image.All(b => b == false);
-        }
- 
-        private void NormalizeAudioIfNecessary(AudioSamples samples, FingerprintConfiguration configuration)
-        {
-            if (configuration.NormalizeSignal)
-            {
-                audioSamplesNormalizer.NormalizeInPlace(samples.Samples);
-            }
+            double[,] kernel = GaussianBlurKernel.Kernel2D(blurConfiguration.Kernel, blurConfiguration.Sigma);
+            return frames
+                .AsParallel()
+                .Select(frame =>
+                {
+                    float[][] image = ImageService.RowCols2Image(frame.ImageRowCols, frame.Rows, frame.Cols);
+                    float[][] blurred = GrayImage.Convolve(image, kernel);
+                    return new Frame(blurred, frame.StartsAt, frame.SequenceNumber);
+                })
+                .ToList();
         }
     }
 }

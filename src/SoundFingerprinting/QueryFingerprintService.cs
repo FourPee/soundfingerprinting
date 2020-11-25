@@ -1,81 +1,55 @@
 ﻿namespace SoundFingerprinting
 {
-    using System.Collections.Concurrent;
-    using System.Collections.Generic;
     using System.Linq;
-
     using SoundFingerprinting.Configuration;
-    using SoundFingerprinting.DAO;
     using SoundFingerprinting.Data;
-    using SoundFingerprinting.Infrastructure;
     using SoundFingerprinting.Math;
     using SoundFingerprinting.Query;
 
-    internal class QueryFingerprintService : IQueryFingerprintService
+    public class QueryFingerprintService : IQueryFingerprintService
     {
-        private readonly ISimilarityUtility similarityUtility;
-
+        private readonly IScoreAlgorithm scoreAlgorithm;
         private readonly IQueryMath queryMath;
 
-        public QueryFingerprintService()
-            : this(
-                DependencyResolver.Current.Get<ISimilarityUtility>(),
-                DependencyResolver.Current.Get<IQueryMath>())
+        public QueryFingerprintService(IScoreAlgorithm scoreAlgorithm, IQueryMath queryMath)
         {
-        }
-
-        internal QueryFingerprintService(ISimilarityUtility similarityUtility, IQueryMath queryMath)
-        {
-            this.similarityUtility = similarityUtility;
+            this.scoreAlgorithm = scoreAlgorithm;
             this.queryMath = queryMath;
         }
-    
-        public QueryResult Query(List<HashedFingerprint> queryFingerprints, QueryConfiguration configuration, IModelService modelService)
+
+        public static QueryFingerprintService Instance { get; } = new QueryFingerprintService(new HammingSimilarityScoreAlgorithm(new SimilarityUtility()), QueryMath.Instance);
+
+        public QueryResult Query(Hashes hashes, QueryConfiguration configuration, IModelService modelService)
         {
-            ConcurrentDictionary<IModelReference, ResultEntryAccumulator> hammingSimilarities;
-            if (modelService.SupportsBatchedSubFingerprintQuery)
+            var groupedQueryResults = GetSimilaritiesUsingBatchedStrategy(hashes, configuration, modelService);
+
+            if (!groupedQueryResults.ContainsMatches)
             {
-                hammingSimilarities = GetSimilaritiesUsingBatchedStrategy(queryFingerprints, configuration, modelService);
-            }
-            else
-            {
-                hammingSimilarities = GetSimilaritiesUsingNonBatchedStrategy(queryFingerprints, configuration, modelService);
+                return QueryResult.Empty(hashes);
             }
 
-            if (!hammingSimilarities.Any())
-            {
-                return QueryResult.EmptyResult();
-            }
-
-            var resultEntries = queryMath.GetBestCandidates(queryFingerprints, hammingSimilarities, configuration.MaxTracksToReturn, modelService, configuration.FingerprintConfiguration);
-            return QueryResult.NonEmptyResult(resultEntries);
+            var resultEntries = queryMath.GetBestCandidates(groupedQueryResults, configuration.MaxTracksToReturn, modelService, configuration);
+            int totalTracksAnalyzed = groupedQueryResults.TracksCount;
+            int totalSubFingerprintsAnalyzed = groupedQueryResults.SubFingerprintsCount;
+            return QueryResult.NonEmptyResult(resultEntries, hashes, totalTracksAnalyzed, totalSubFingerprintsAnalyzed);
         }
 
-        private ConcurrentDictionary<IModelReference, ResultEntryAccumulator> GetSimilaritiesUsingNonBatchedStrategy(IEnumerable<HashedFingerprint> queryFingerprints, QueryConfiguration configuration, IModelService modelService)
+        private GroupedQueryResults GetSimilaritiesUsingBatchedStrategy(Hashes queryHashes, QueryConfiguration configuration, IModelService modelService)
         {
-            var hammingSimilarities = new ConcurrentDictionary<IModelReference, ResultEntryAccumulator>();
-            foreach (var queryFingerprint in queryFingerprints)
-            {
-                var subFingerprints = modelService.ReadSubFingerprints(queryFingerprint.HashBins, configuration);
-                similarityUtility.AccumulateHammingSimilarity(subFingerprints, queryFingerprint, hammingSimilarities);
-            }
+            var matchedSubFingerprints = modelService.Query(queryHashes, configuration);
+            return queryHashes
+                .AsParallel()
+                .Aggregate(new GroupedQueryResults(queryHashes.DurationInSeconds, queryHashes.RelativeTo), (seed, queryFingerprint) =>
+                {
+                    var matched = matchedSubFingerprints.Where(queryResult => QueryMath.IsCandidatePassingThresholdVotes(queryFingerprint.HashBins, queryResult.Hashes, configuration.ThresholdVotes));
+                    foreach (var subFingerprint in matched)
+                    {
+                        double score = scoreAlgorithm.GetScore(queryFingerprint, subFingerprint, configuration);
+                        seed.Add(queryFingerprint, subFingerprint, score);
+                    }
 
-            return hammingSimilarities;
-        }
-
-        private ConcurrentDictionary<IModelReference, ResultEntryAccumulator> GetSimilaritiesUsingBatchedStrategy(IEnumerable<HashedFingerprint> queryFingerprints, QueryConfiguration configuration, IModelService modelService)
-        {
-            var hashedFingerprints = queryFingerprints as List<HashedFingerprint> ?? queryFingerprints.ToList();
-            var allCandidates = modelService.ReadSubFingerprints(hashedFingerprints.Select(querySubfingerprint => querySubfingerprint.HashBins), configuration);
-            var hammingSimilarities = new ConcurrentDictionary<IModelReference, ResultEntryAccumulator>();
-            foreach (var hashedFingerprint in hashedFingerprints)
-            {
-                HashedFingerprint queryFingerprint = hashedFingerprint;
-                var subFingerprints = allCandidates.Where(candidate => queryMath.IsCandidatePassingThresholdVotes(queryFingerprint, candidate, configuration.ThresholdVotes));
-                similarityUtility.AccumulateHammingSimilarity(subFingerprints, queryFingerprint, hammingSimilarities);
-            }
-
-            return hammingSimilarities;
+                    return seed;
+                });
         }
     }
 }

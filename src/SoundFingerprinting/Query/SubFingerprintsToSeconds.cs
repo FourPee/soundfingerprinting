@@ -1,12 +1,15 @@
 ﻿namespace SoundFingerprinting.Query
 {
-    using SoundFingerprinting.Configuration;
-
     internal class SubFingerprintsToSeconds
     {
-        public static double AdjustLengthToSeconds(double endsAt, double startsAt, FingerprintConfiguration configuration)
+        public static double MatchLengthToSeconds(double endsAt, double startsAt, double fingerprintLengthInSeconds)
         {
-            return endsAt - startsAt + configuration.FingerprintLengthInSeconds;
+            return (endsAt + fingerprintLengthInSeconds) - startsAt;
+        }
+
+        public static double GapLengthToSeconds(double endsAt, double startsAt, double fingerprintLengthInSeconds)
+        {
+            return System.Math.Max(0, endsAt - (startsAt + fingerprintLengthInSeconds));
         }
     }
 }

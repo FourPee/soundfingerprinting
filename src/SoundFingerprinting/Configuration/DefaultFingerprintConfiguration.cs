@@ -1,6 +1,7 @@
 namespace SoundFingerprinting.Configuration
 {
-    using System.Linq;
+    using System;
+    using SoundFingerprinting.Configuration.Frames;
 
     public class DefaultFingerprintConfiguration : FingerprintConfiguration
     {
@@ -10,8 +11,11 @@ namespace SoundFingerprinting.Configuration
             HashingConfig = new DefaultHashingConfig();
             TopWavelets = 200;
             SampleRate = 5512;
-            NormalizeSignal = false;
-            Clusters = Enumerable.Empty<string>();
+            HaarWaveletNorm = Math.Sqrt(2);
+            FingerprintLengthInSeconds = (double)SamplesPerFingerprint / SampleRate;
+            OriginalPointSaveTransform =  (_ => Array.Empty<byte>());
+            GaussianBlurConfiguration = GaussianBlurConfiguration.None;
+            FrameNormalizationTransform = new LogSpectrumNormalization();
         }
     }
 }

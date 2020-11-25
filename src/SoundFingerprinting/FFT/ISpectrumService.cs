@@ -8,8 +8,6 @@
 
     internal interface ISpectrumService
     {
-        List<SpectralImage> CreateLogSpectrogram(AudioSamples audioSamples, SpectrogramConfig configuration);
-
-        float[][] CreateSpectrogram(AudioSamples samples, int overlap, int wdftSize);
+        List<Frame> CreateLogSpectrogram(AudioSamples audioSamples, SpectrogramConfig configuration);
     }
 }

@@ -4,7 +4,10 @@
 
     using DAO;
 
+    using ProtoBuf;
+
     [Serializable]
+    [ProtoContract]
     public class SpectralImageData
     {
         public SpectralImageData(float[] image, int orderNumber, IModelReference trackReference) : this()
@@ -19,20 +22,23 @@
             SpectralImageReference = spectralImageReference;
         }
 
-        [Obsolete]
         public SpectralImageData()
         {
         }
 
-        public float[] Image { get; internal set; }
+        [ProtoMember(1)]
+        public float[] Image { get; }
 
-        public int OrderNumber { get; internal set; }
+        [ProtoMember(2)]
+        public int OrderNumber { get; }
 
         [IgnoreBinding]
-        public IModelReference TrackReference { get; internal set; }
+        [ProtoMember(3)]
+        public IModelReference TrackReference { get; }
 
         [IgnoreBinding]
-        public IModelReference SpectralImageReference { get; internal set; }
+        [ProtoMember(4)]
+        public IModelReference SpectralImageReference { get; }
 
         public override bool Equals(object obj)
         {

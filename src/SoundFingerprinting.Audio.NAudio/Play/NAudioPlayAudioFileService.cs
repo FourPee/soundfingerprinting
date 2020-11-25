@@ -1,13 +1,10 @@
 ﻿namespace SoundFingerprinting.Audio.NAudio.Play
 {
-    using SoundFingerprinting.Infrastructure;
-
     public class NAudioPlayAudioFileService : IPlayAudioFileService
     {
         private readonly INAudioPlayAudioFactory audioFactory;
 
-        public NAudioPlayAudioFileService()
-            : this(DependencyResolver.Current.Get<INAudioPlayAudioFactory>())
+        public NAudioPlayAudioFileService(): this(new NAudioPlayAudioFactory())
         {
         }
 
@@ -27,8 +24,7 @@
 
         public void StopPlayingFile(object playFileAttributes)
         {
-            var attributes = playFileAttributes as PlayFileAttributes;
-            if (attributes != null)
+            if (playFileAttributes is PlayFileAttributes attributes)
             {
                 attributes.WavePlayer.Stop();
                 attributes.WaveStream.Close();

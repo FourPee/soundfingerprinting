@@ -1,35 +1,55 @@
 ﻿namespace SoundFingerprinting.DAO
 {
-    public class ModelReference<T> : IModelReference<T>
+    using System;
+    using ProtoBuf;
+
+    [Serializable]
+    [ProtoContract]
+    public class ModelReference<T> : IModelReference
     {
         public ModelReference(T id)
         {
             Id = id;
         }
 
-        public T Id { get; private set; }
-
-        object IModelReference.Id
+        private ModelReference()
         {
-            get
+            // left for proto-buf
+        }
+
+        public static ModelReference<T> Null { get; } = new ModelReference<T>(default);
+
+        [ProtoMember(1)]
+        public T Id { get; }
+        
+        public TOut Get<TOut>()
+        {
+            if (Id is TOut get)
             {
-                return Id;
+                return get;
             }
+
+            throw new InvalidCastException($"{typeof(T)} cannot be converted to {typeof(TOut)}");
         }
 
         public override bool Equals(object obj)
         {
-            if (!(obj is ModelReference<T>))
+            if (!(obj is ModelReference<T> @object))
             {
                 return false;
             }
 
-            return Id.Equals(((ModelReference<T>)obj).Id);
+            return Id.Equals(@object.Id);
         }
 
         public override int GetHashCode()
         {
             return Id.GetHashCode();
+        }
+
+        public override string ToString()
+        {
+            return $"ModelReference {nameof(Id)}: {Id}";
         }
     }
 }

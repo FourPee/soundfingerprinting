@@ -1,5 +1,6 @@
 ﻿namespace SoundFingerprinting.Tests.Unit.Utils
 {
+    using System;
     using System.Collections.Generic;
     using System.IO;
 
@@ -15,7 +16,7 @@
         [Test]
         public void ShouldNotValidateSinceNoSuchAction()
         {
-            string scenario = string.Format("Action,{0},IncrementalStatic,0,5115", "C:\\");
+            string scenario = "Action,C:\\,IncrementalStatic,0,5115";
 
             var result = validator.ValidateScenarious(new List<string> { scenario }.ToArray());
 
@@ -27,7 +28,7 @@
         {
             string path = TestContext.CurrentContext.TestDirectory;
 
-            string scenario = string.Format("Insert,{0},IncrementalStatic,0,5115", path);
+            string scenario = $"Insert,{path},IncrementalStatic,0,5115";
 
             var result = validator.ValidateScenarious(new List<string> { scenario }.ToArray());
 
@@ -39,12 +40,12 @@
         {
             string path = TestContext.CurrentContext.TestDirectory;
 
-            string scenario1 = string.Format("Insert,{0},IncrementalStatic,0,5115", path);
-            string scenario2 = string.Format("Run,{0},{1},IncrementalRandom,256,512,10,10|30|50", path, path);
-            string scenario3 = string.Format("Run,{0},{1},IncrementalRandom,512,768,10,10|30|50", path, path);
-            string scenario4 = string.Format("Run,{0},{1},IncrementalRandom,768,1024,10,10|30|50", path, path);
-            string scenario5 = string.Format("Insert,{0},IncrementalStatic,0,512", path);
-            string scenario6 = string.Format("Run,{0},{1},IncrementalRandom,256,512,10,10|30|50", path, path);
+            string scenario1 = $"Insert,{path},IncrementalStatic,0,5115";
+            string scenario2 = $"Run,{path},{path},IncrementalRandom,256,512,10,10|30|50";
+            string scenario3 = $"Run,{path},{path},IncrementalRandom,512,768,10,10|30|50";
+            string scenario4 = $"Run,{path},{path},IncrementalRandom,768,1024,10,10|30|50";
+            string scenario5 = $"Insert,{path},IncrementalStatic,0,512";
+            string scenario6 = $"Run,{path},{path},IncrementalRandom,256,512,10,10|30|50";
 
             var result = validator.ValidateScenarious(new List<string> { scenario1, scenario2, scenario3, scenario4, scenario5, scenario6 }.ToArray());
 
@@ -56,7 +57,7 @@
         {
             string path = TestContext.CurrentContext.TestDirectory;
 
-            string scenario = string.Format("Run,{0},{1},IncrementalRandom,256,512,10,10|30|50", path, path);
+            string scenario = $"Run,{path},{path},IncrementalRandom,256,512,10,10|30|50";
 
             var result = validator.ValidateScenarious(new List<string> { scenario }.ToArray());
 
@@ -66,24 +67,28 @@
         [Test]
         public void ShouldNotValidateInsertSinceNoAudioFilesInInputFolder()
         {
-            string path = Path.GetTempPath();
+            var directory = Directory.CreateDirectory(Path.Combine(TestContext.CurrentContext.TestDirectory, Guid.NewGuid().ToString()));
+            string path = directory.FullName;
 
-            string scenario = string.Format("Insert,{0},IncrementalStatic,0,5115", path);
+            string scenario = $"Insert,{path},IncrementalStatic,0,5115";
 
             var result = validator.ValidateScenarious(new List<string> { scenario }.ToArray());
 
+            Directory.Delete(directory.FullName);
             Assert.IsFalse(result.IsValid);
         }
 
         [Test]
         public void ShouldNotValidateRunSinceNoAudioFilesInInputFolder()
         {
-            string path = Path.GetTempPath();
+            var directory = Directory.CreateDirectory(Path.Combine(TestContext.CurrentContext.TestDirectory, Guid.NewGuid().ToString()));
+            string path = directory.FullName;
 
-            string scenario = string.Format("Run,{0},{1},IncrementalRandom,256,512,10,10|30|50", path, path);
+            string scenario = $"Run,{path},{path},IncrementalRandom,256,512,10,10|30|50";
 
             var result = validator.ValidateScenarious(new List<string> { scenario }.ToArray());
 
+            Directory.Delete(directory.FullName);
             Assert.IsFalse(result.IsValid);
         }
     }
